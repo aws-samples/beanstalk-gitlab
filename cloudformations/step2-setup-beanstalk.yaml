@@ -1,0 +1,278 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: Beanstalk
+
+Resources:
+  S3AccessPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: beanstalk_s3_inline_policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: [
+              "s3:GetObject",
+              "s3:ListObject"
+            ]
+            Resource: '*'
+      Roles:
+        - !Ref NodeInstanceRole
+        - !Ref BeanStalkInstanceRole
+
+  CloudWatchPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: beanstalk_cloudwatch_inline_policy
+      PolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Action: [
+              "logs:CreateLogGroup",
+              "logs:CreateLogStream",
+              "logs:GetLogEvents",
+              "logs:PutLogEvents",
+              "logs:DescribeLogGroups",
+              "logs:DescribeLogStreams",
+              "logs:PutRetentionPolicy"
+            ]
+            Resource: '*'
+      Roles:
+        - !Ref NodeInstanceRole
+        - !Ref BeanStalkInstanceRole
+
+  NodeInstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: AWSBLOG-GITLAB-EC2ServiceRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/AWSElasticBeanstalkWebTier"
+        - "arn:aws:iam::aws:policy/AWSElasticBeanstalkMulticontainerDocker"
+        - "arn:aws:iam::aws:policy/AWSElasticBeanstalkWorkerTier"
+        - "arn:aws:iam::aws:policy/AWSElasticBeanstalkCustomPlatformforEC2Role"
+        - "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+      Path: /
+
+  BeanStalkEC2InstanceProfile:
+    Type: "AWS::IAM::InstanceProfile"
+    Properties:
+      "InstanceProfileName": BeanstalkInstanceProfile,
+      "Roles": [ !Ref NodeInstanceRole ]
+
+  BeanStalkInstanceRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: AWSBLOG-GITLAB-BeanStalkServiceRole
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - elasticbeanstalk.amazonaws.com
+            Action:
+              - "sts:AssumeRole"
+      ManagedPolicyArns:
+        - "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkEnhancedHealth"
+        - "arn:aws:iam::aws:policy/AmazonAPIGatewayAdministrator"
+        - "arn:aws:iam::aws:policy/service-role/AWSElasticBeanstalkService"
+      Path: /
+
+  ELBAccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Beanstalk-sg
+      VpcId:
+        Fn::ImportValue: "awsblogbean-vpc-id"
+      SecurityGroupIngress:
+        - IpProtocol: 'tcp'
+          CidrIp: 0.0.0.0/0
+          FromPort: 443
+          ToPort: 443
+        - IpProtocol: 'tcp'
+          CidrIp: 0.0.0.0/0
+          FromPort: 80
+          ToPort: 80
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Name
+          Value: ELBAccessSecurityGroup
+
+  BeanstalkEC2AccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Beanstalk-sg
+      VpcId:
+        Fn::ImportValue: "awsblogbean-vpc-id"
+      SecurityGroupIngress:
+        - IpProtocol: 'tcp'
+          CidrIp: 0.0.0.0/0
+          FromPort: 22
+          ToPort: 22
+      SecurityGroupEgress:
+        - IpProtocol: '-1'
+          CidrIp: '0.0.0.0/0'
+      Tags:
+        - Key: Name
+          Value: BeanstalkEC2AccessSecurityGroup
+
+  SampleBeanstalkGitLabApplication:
+    Type: AWS::ElasticBeanstalk::Application
+    Properties:
+      ApplicationName: "SampleAWSElasticBeanstalkApplication"
+      Description: "AWS Elastic Beanstalk NOJEJS Sample Application"
+
+  SampleBeanstalkGitLabApplicationVersion:
+    Type: AWS::ElasticBeanstalk::ApplicationVersion
+    Properties:
+      ApplicationName:
+        Ref: "SampleBeanstalkGitLabApplication"
+      Description: "AWS Elastic Beanstalk NOJEJS Sample Application Version"
+      SourceBundle:
+        # S3Bucket: !Sub "elasticbeanstalk-samples-${AWS::Region}"
+        S3Bucket: "aws-bigdata-blog"
+        S3Key: "artifacts/awsblog-beanstalk-gitlab/baseline-application/sample-nodejs-app.zip"
+
+  SampleBeanstalkGitLabEnvironment:
+    Type: AWS::ElasticBeanstalk::Environment
+    Properties:
+      ApplicationName:
+        Ref: "SampleBeanstalkGitLabApplication"
+      Description: "AWS Elastic Beanstalk Environment running Python Sample Application"
+      EnvironmentName: SampleBeanstalkGitLabEnvironment
+      SolutionStackName: "64bit Amazon Linux 2 v3.2.6 running Docker"
+      Tier:
+        Name: "WebServer"
+        Type: Standard
+      OptionSettings:
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: IamInstanceProfile
+          Value: !Ref BeanStalkEC2InstanceProfile
+        - Namespace: "aws:autoscaling:asg"
+          OptionName: Availability Zones
+          Value: "Any 2"
+        - Namespace: "aws:autoscaling:asg"
+          OptionName: MinSize
+          Value: 2
+        - Namespace: "aws:autoscaling:asg"
+          OptionName: MaxSize
+          Value: 3
+        - Namespace: "aws:autoscaling:trigger"
+          OptionName: MeasureName
+          Value: CPUUtilization
+        - Namespace: "aws:autoscaling:trigger"
+          OptionName: Statistic
+          Value: Average
+        - Namespace: "aws:autoscaling:trigger"
+          OptionName: Unit
+          Value: Percent
+        - Namespace: "aws:autoscaling:trigger"
+          OptionName: LowerThreshold
+          Value: 25
+        - Namespace: "aws:autoscaling:trigger"
+          OptionName: UpperThreshold
+          Value: 75
+        - Namespace: "aws:elasticbeanstalk:command"
+          OptionName: DeploymentPolicy
+          Value: AllAtOnce
+        - Namespace: "aws:autoscaling:updatepolicy:rollingupdate"
+          OptionName: RollingUpdateEnabled
+          Value: false
+        #- Namespace: "aws:autoscaling:updatepolicy:rollingupdate"
+        #  OptionName: RollingUpdateType
+        #  Value: Immutable
+        - Namespace: "aws:autoscaling:updatepolicy:rollingupdate"
+          OptionName: MinInstancesInService
+          Value: 1
+        - Namespace: "aws:autoscaling:updatepolicy:rollingupdate"
+          OptionName: MaxBatchSize
+          Value: 1
+        - Namespace: "aws:elasticbeanstalk:hostmanager"
+          OptionName: LogPublicationControl
+          Value: true
+        - Namespace: "aws:elasticbeanstalk:cloudwatch:logs"
+          OptionName: StreamLogs
+          Value: false
+        - Namespace: "aws:elasticbeanstalk:cloudwatch:logs"
+          OptionName: RetentionInDays
+          Value: 1
+        - Namespace: "aws:elasticbeanstalk:cloudwatch:logs:health"
+          OptionName: DeleteOnTerminate
+          Value: false
+        - Namespace: "aws:ec2:instances"
+          OptionName: InstanceTypes
+          Value: t2.small,t3.small
+        - Namespace: "aws:ec2:vpc"
+          OptionName: VPCId
+          Value:
+            Fn::ImportValue: "awsblogbean-vpc-id"
+        - Namespace: "aws:ec2:vpc"
+          OptionName: ELBScheme
+          Value: public
+        - Namespace: "aws:elasticbeanstalk:environment"
+          OptionName: EnvironmentType
+          Value: LoadBalanced
+        - Namespace: "aws:elasticbeanstalk:environment"
+          OptionName: LoadBalancerType
+          Value: application
+        # SERVER_PORT environment variable is not used - but just leaving it to be there.
+        - Namespace: "aws:elasticbeanstalk:application:environment"
+          OptionName: SERVER_PORT
+          Value: 8080
+        # AWS_S3_BUCKET_VALUE will be used in .platoform/hooks/prebuild/01_pre_deploy_script.sh through an environment variable.
+        - Namespace: "aws:elasticbeanstalk:application:environment"
+          OptionName: AWS_S3_BUCKET_VALUE
+          Value:
+            Fn::ImportValue: "exp-s3-bucket"
+        - Namespace: "aws:elasticbeanstalk:healthreporting:system"
+          OptionName: SystemType
+          Value: enhanced
+        - Namespace: "aws:elasticbeanstalk:command"
+          OptionName: IgnoreHealthCheck
+          Value: true
+        - Namespace: "aws:elbv2:listener:default"
+          OptionName: ListenerEnabled
+          Value: true
+        - Namespace: "aws:elasticbeanstalk:environment:process:default"
+          OptionName: HealthCheckPath
+          Value: "/health"
+        - Namespace: "aws:elasticbeanstalk:application"
+          OptionName: "Application Healthcheck URL"
+          Value: "/health"
+        - Namespace: "aws:elbv2:listener:default"
+          OptionName: Protocol
+          Value: "HTTP"
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: IamInstanceProfile
+          Value: !Ref BeanStalkEC2InstanceProfile
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: SecurityGroups
+          Value: !Ref BeanstalkEC2AccessSecurityGroup
+        - Namespace: "aws:autoscaling:launchconfiguration"
+          OptionName: SecurityGroups
+          Value: !Ref BeanstalkEC2AccessSecurityGroup
+        - Namespace: "aws:elbv2:loadbalancer"
+          OptionName: SecurityGroups
+          Value: !Ref ELBAccessSecurityGroup
+        - Namespace: "aws:elbv2:loadbalancer"
+          OptionName: ManagedSecurityGroup
+          Value: !Ref ELBAccessSecurityGroup
+        - Namespace: "aws:ec2:vpc"
+          OptionName: Subnets
+          Value:
+            Fn::ImportValue: "VPCSubnetsList"
+        - Namespace: "aws:ec2:vpc"
+          OptionName: ELBSubnets
+          Value:
+            Fn::ImportValue: "VPCSubnetsList"

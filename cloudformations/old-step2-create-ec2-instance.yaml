@@ -1,0 +1,274 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: EC2 Instance
+Parameters:
+  paramKeyName:
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    ConstraintDescription: must be the name of an existing EC2 KeyPair.
+  paramInstanceType:
+    Description: EC2 instance specs configuration
+    Type: String
+    Default: t2.large
+    AllowedValues:
+      - t2.large
+      - t2.xlarge
+  paramPrefixS3Bucket:
+    Description: Prefix of S3 bucket that will be created to store the certificates that will be created and these will be used later.
+    Type: String
+    Default: "aws-blog-beanstalk-gitlab-bucket"
+  paramHostedZoneName:
+    Description: Route 53 Hosted Zone  - For simplicity, we will be using the default value and do not change.
+    Type: String
+    Default: "aws-blog-git-bean.com"
+    AllowedValues:
+      - aws-blog-git-bean.com
+  paramSubDomainName:
+    Description: Sub domain name for the A record - For simplicity, we will be using the default value and do not change.
+    Type: String
+    Default: "runner"
+    AllowedValues:
+      - runner
+
+Mappings:
+  AMIs:
+    us-east-1:
+      Name: ami-06b263d6ceff0b3dd
+    us-east-2:
+      Name: ami-0010d386b82bc06f0
+
+Resources:
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Join
+        - "-"
+        - - !Ref paramPrefixS3Bucket
+          - !Select
+            - 0
+            - !Split
+              - "-"
+              - !Select
+                - 2
+                - !Split
+                  - "/"
+                  - !Ref "AWS::StackId"
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      AccessControl: BucketOwnerFullControl
+
+  AWSBLOGBEANEC2InstanceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - 'sts:AssumeRole'
+      Path: /
+
+  AWSBlogBeanstalkS3BucketsPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AWS-BEANSTALK-BLOG-S3Buckets-Policy
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - 's3:*'
+            # We can just use the bucket that will get created in this CF template.
+            Resource: '*'
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  AWSBlogBeanstalkElasticBeanstalkPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AWS-BEANSTALK-BLOG-ElasticBeanstalk-Policy
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'elasticbeanstalk:*'
+            # arn:aws:elasticbeanstalk:us-east-1:246997141225:applicationversion/SampleAWSElasticBeanstalkApplication/version-ymFeXCyH
+            Resource: '*'
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  AWSBlogBeanstalkCloudFormationPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AWS-BEANSTALK-BLOG-CloudFormation-Policy
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'cloudformation:*'
+            # cloudformation:GetTemplate on resource: arn:aws:cloudformation:us-east-1:246997141225:stack/awseb-e-3eizpfmjmb-stack/d5b4fc10-835c-11eb-b68a-0ef29e620f87
+            Resource: '*'
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  AWSBlogBeanstalkEC2Policy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AWS-BEANSTALK-BLOG-EC2-Policy
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'ec2:*'
+            # Service:AmazonEC2, Message:You do not have permission to perform the 'ec2:DescribeSubnets' action.
+            Resource: '*'
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  AWSBlogBeanstalkCWLogsPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AWS-BEANSTALK-BLOG-CWLOGS-Policy
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'logs:*'
+            Resource: '*'
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  AWSBlogBeanstalkAutoscalingPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AWS-BEANSTALK-BLOG-AUTOSCALING-Policy
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'autoscaling:*'
+            Resource: '*'
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  AWSBlogBeanstalkELBPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AWS-BEANSTALK-BLOG-ELBG-Policy
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'elasticloadbalancing:*'
+            Resource: '*'
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  AWSBlogBeanstalkIAMPolicy:
+    Type: 'AWS::IAM::Policy'
+    Properties:
+      PolicyName: AWS-BEANSTALK-BLOG-IAM-Policy
+      PolicyDocument:
+        Statement:
+          - Effect: Allow
+            Action:
+              - 'iam:*'
+            Resource: '*'
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  AWSBlogBeanstalkInstanceProfile:
+    Type: 'AWS::IAM::InstanceProfile'
+    Properties:
+      Path: /
+      Roles:
+        - !Ref AWSBLOGBEANEC2InstanceRole
+
+  GitLabEC2Instance:
+    Type: "AWS::EC2::Instance"
+    Properties:
+      InstanceType: !Ref paramInstanceType
+      KeyName: !Ref paramKeyName
+      IamInstanceProfile: !Ref AWSBlogBeanstalkInstanceProfile
+      BlockDeviceMappings:
+        - DeviceName: /dev/sda1
+          Ebs:
+            VolumeType: "io1"
+            VolumeSize: 30
+            DeleteOnTermination: 'true'
+            Encrypted: 'true'
+            Iops: 300
+      ImageId: !FindInMap
+        - AMIs
+        - !Ref 'AWS::Region'
+        - Name
+      NetworkInterfaces:
+        - DeviceIndex: '0'
+          AssociatePublicIpAddress: 'true'
+          DeleteOnTermination: 'true'
+          SubnetId:
+              Fn::ImportValue: "awsblogbean-public-subnet-a"
+          GroupSet:
+              - Fn::ImportValue: "awsblogbean--securitygroup-id"
+      Tags:
+        - Key: Name
+          Value: AWSBlogBeanstalk-EC2Instance
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash -xe
+            cd /home/ubuntu/
+            touch test1
+            sudo apt update -y
+            sudo apt install awscli -y
+            # Get the latest CloudFormation package
+            sudo apt update -y aws-cfn-bootstrap
+            aws s3 cp s3://aws-bigdata-blog/artifacts/awsblog-beanstalk-gitlab/shell/gitlab-setup.sh .
+            chmod -R 777 gitlab-setup.sh
+            sh -x ./gitlab-setup.sh ${S3Bucket} ${paramSubDomainName}.${paramHostedZoneName} test > gitlab-setup-output.log
+
+  AWSBlogBeanstalkRoute53HostedZone:
+    Type: 'AWS::Route53::HostedZone'
+    Properties:
+      HostedZoneConfig:
+        Comment: 'AWS Blog GitLab Beanstalk hosted zone'
+      Name: !Ref paramHostedZoneName
+      VPCs:
+        -
+          VPCId:
+            Fn::ImportValue: "awsblogbean-vpc-id"
+          VPCRegion: 'us-east-1'
+
+  DnsRecord:
+    Type: AWS::Route53::RecordSet
+    DependsOn: [GitLabEC2Instance, AWSBlogBeanstalkRoute53HostedZone]
+    Properties:
+      HostedZoneName: !Join ['', [!Ref 'paramHostedZoneName', .]]
+      Comment: DNS name for my instance.
+      Name: !Join ['', [!Ref 'paramSubDomainName', ., !Ref 'paramHostedZoneName']]
+      Type: A
+      TTL: '900'
+      ResourceRecords:
+        - !GetAtt GitLabEC2Instance.PublicIp
+
+Outputs:
+  StackName:
+    Value: !Ref 'AWS::StackName'
+  ExpS3Bucket:
+    Description: S3 Bucket created in your account.
+    Value: !Ref 'S3Bucket'
+    Export:
+      Name: "exp-s3-bucket"
+  GitEc2PublicDNS:
+    Description: GitLab Ec2 instance's Public Dns Name.
+    Value: !GetAtt GitLabEC2Instance.PublicDnsName
+    Export:
+       Name: !Sub "${AWS::StackName}-PublicDnsName"
+  GitEc2PublicIp:
+    Description: GitLab Ec2 instance's Public Ip Address.
+    Value: !GetAtt GitLabEC2Instance.PublicIp
+    Export:
+      Name: !Sub "public-ip-for-A-recordset"

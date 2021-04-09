@@ -1,0 +1,23 @@
+In step3 cf template, need to change the s3 bucket to the aws public s3 bucket.
+This will hold the sample-nodejs-app zip file.
+SourceBundle:
+        # S3Bucket: !Sub "elasticbeanstalk-samples-${AWS::Region}"
+        S3Bucket: "skkodali-proserve"
+        S3Key: "beanstalk-gitlab/sample-nodejs-app.zip"
+
+=======================================================================================================================================================================================================================
+
+In step3 cf template, need to upload the gitlab-setup.sh script also the the public s3 bucket and update the path in the cf template.
+
+aws s3 cp s3://skkodali-proserve/beanstalk-gitlab/shell/gitlab-setup.sh .
+
+=======================================================================================================================================================================================================================
+
+step2 template file: TODO - Update the below s3 path with blog post s3 bucket.
+
+=====================
+
+in the gitlab-setup.sh script -> update the s3 paths.
+
+=======
+

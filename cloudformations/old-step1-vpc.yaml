@@ -1,0 +1,152 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: This template creates an Amazon VPC and subnet with the required configuration for a cross-realm trust.
+Resources:
+  VPC:
+    Type: AWS::EC2::VPC
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: true
+      EnableDnsHostnames: true
+      InstanceTenancy: default
+      Tags:
+        - Key: Name
+          Value: AWSBLOGBEANVPC
+  PublicSubnetA:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: "us-east-1a"
+      MapPublicIpOnLaunch: 'True'
+      Tags:
+        - Key: Name
+          Value: AWSBLOGBEANSubnetA
+
+  PublicSubnetB:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: 10.0.2.0/24
+      AvailabilityZone: "us-east-1b"
+      MapPublicIpOnLaunch: 'True'
+      Tags:
+        - Key: Name
+          Value: AWSBLOGBEANSubnetB
+
+  PublicSubnetC:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref 'VPC'
+      CidrBlock: 10.0.3.0/24
+      AvailabilityZone: "us-east-1c"
+      MapPublicIpOnLaunch: 'True'
+      Tags:
+        - Key: Name
+          Value: AWSBLOGBEANSubnetC
+
+  InternetGateway:
+    Type: AWS::EC2::InternetGateway
+    Properties:
+      Tags:
+        - Key: Name
+          Value: AWSBLOGBEANGateway
+  MyGatewayAttachment:
+    Type: AWS::EC2::VPCGatewayAttachment
+    Properties:
+      InternetGatewayId: !Ref 'InternetGateway'
+      VpcId: !Ref 'VPC'
+  PublicRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref 'VPC'
+  PublicRoute:
+    Type: AWS::EC2::Route
+    Properties:
+      RouteTableId: !Ref 'PublicRouteTable'
+      DestinationCidrBlock: '0.0.0.0/0'
+      GatewayId: !Ref 'InternetGateway'
+    DependsOn:
+      - MyGatewayAttachment
+  PublicSubnetRouteAssociationA:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'PublicRouteTable'
+      SubnetId: !Ref 'PublicSubnetA'
+  PublicSubnetRouteAssociationB:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'PublicRouteTable'
+      SubnetId: !Ref 'PublicSubnetB'
+  PublicSubnetRouteAssociationC:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref 'PublicRouteTable'
+      SubnetId: !Ref 'PublicSubnetC'
+
+  AWSBLOGBEANAccessSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: CloudFormationGroup
+      VpcId: !Ref 'VPC'
+      SecurityGroupIngress:
+        - IpProtocol: '-1'
+          CidrIp: "10.0.0.0/16"
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: "10.0.0.0/16"
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+          CidrIp: "0.0.0.0/0"
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: "10.0.0.0/16"
+      Tags:
+        - Key: Name
+          Value: AWSBLOGBEANVPCMasterSecurityGroup
+  VPCDefaultSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !GetAtt 'VPC.DefaultSecurityGroup'
+      IpProtocol: '-1'
+      CidrIp: 10.0.0.0/16
+Outputs:
+  StackName:
+    Value: !Ref 'AWS::StackName'
+  SubnetIDA:
+    Description: Public Subnet A.
+    Value: !Ref 'PublicSubnetA'
+    Export:
+      Name: "awsblogbean-public-subnet-a"
+  SubnetIDB:
+    Description: Public Subnet B.
+    Value: !Ref 'PublicSubnetB'
+    Export:
+      Name: "awsblogbean-public-subnet-b"
+  SubnetIDC:
+    Description: Public Subnet C.
+    Value: !Ref 'PublicSubnetC'
+    Export:
+      Name: "awsblogbean-public-subnet-c"
+  VPCSubnets:
+    Description: All subnets
+    Value:
+      'Fn::Join': [",", [!Ref 'PublicSubnetA', !Ref 'PublicSubnetB', !Ref 'PublicSubnetC']]
+    Export:
+      Name: "VPCSubnetsList"
+  AWSBLOGBEANAccessSecurityGroup:
+    Description: Use this security group ID for all your services.
+    Value: !GetAtt 'AWSBLOGBEANAccessSecurityGroup.GroupId'
+    Export:
+      Name: "awsblogbean--securitygroup-id"
+  VPCID:
+    Description: Use this VPC ID for all your services.
+    Value: !Ref 'VPC'
+    Export:
+      Name: "awsblogbean-vpc-id"
