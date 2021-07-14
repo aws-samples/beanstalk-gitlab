@@ -19,9 +19,9 @@ Parameters:
   paramHostedZoneName:
     Description: Route 53 Hosted Zone  - For simplicity, we will be using the default value and do not change.
     Type: String
-    Default: "aws-blog-git-bean.com"
+    Default: "example.com"
     AllowedValues:
-      - aws-blog-git-bean.com
+      - example.com
   paramSubDomainName:
     Description: Sub domain name for the A record - For simplicity, we will be using the default value and do not change.
     Type: String

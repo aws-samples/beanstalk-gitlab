@@ -1,6 +1,11 @@
 AWSTemplateFormatVersion: "2010-09-09"
 Description: Beanstalk
 
+Parameters:
+  paramSolutionStackName:
+    Description: "The name of the solution stack name. Get the latest name from - https://docs.aws.amazon.com/elasticbeanstalk/latest/platforms/platforms-supported.html#platforms-supported.docker"
+    Type: String
+
 Resources:
   S3AccessPolicy:
     Type: 'AWS::IAM::Policy'
@@ -151,7 +156,7 @@ Resources:
         Ref: "SampleBeanstalkGitLabApplication"
       Description: "AWS Elastic Beanstalk Environment running Python Sample Application"
       EnvironmentName: SampleBeanstalkGitLabEnvironment
-      SolutionStackName: "64bit Amazon Linux 2 v3.2.6 running Docker"
+      SolutionStackName: !Ref paramSolutionStackName
       Tier:
         Name: "WebServer"
         Type: Standard
