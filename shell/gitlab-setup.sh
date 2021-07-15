@@ -37,6 +37,7 @@ _setEnv()
     GIT_CE_URL="https://packages.gitlab.com/install/repositories/gitlab/gitlab-ce/script.deb.sh"
     BASH="/bin/bash"
     OPENSSL_OPTIONS="/C=US/ST=London/L=London/O=BeangitlabInc/OU=DEV/CN=${URL}"
+    OPENSSL_ADDEXT_OPTIONS="subjectAltName=DNS:${URL}"
     GITLAB_HOME="/etc/gitlab"
     GITLAB_CERTS_DIR=${GITLAB_HOME}/trusted-certs
     GITLAB_CONFIG_FILE="gitlab.rb"
@@ -65,7 +66,7 @@ _setupSSLCerts()
   cd /etc/gitlab/
   sudo chmod -R 755 /etc/gitlab/trusted-certs/
   cd ${GITLAB_CERTS_DIR}
-  sudo openssl req -newkey rsa:4096 -nodes -sha256 -keyout ${GITLAB_CERTS_DIR}/${CERT_KEY} -x509 -days 365 -out ${GITLAB_CERTS_DIR}/${CERT_CRT} -subj ${OPENSSL_OPTIONS}
+  sudo openssl req -newkey rsa:4096 -nodes -sha256 -keyout ${GITLAB_CERTS_DIR}/${CERT_KEY} -x509 -days 365 -out ${GITLAB_CERTS_DIR}/${CERT_CRT} -subj ${OPENSSL_OPTIONS} -addext ${OPENSSL_ADDEXT_OPTIONS}
   sudo chmod 600 ${GITLAB_CERTS_DIR}/${CERT_KEY}
   sudo chmod 600 ${GITLAB_CERTS_DIR}/${CERT_CRT}
 }
